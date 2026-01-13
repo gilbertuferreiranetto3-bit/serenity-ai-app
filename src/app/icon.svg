@@ -1,0 +1,93 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient (verde → azul) -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:rgb(99, 179, 163);stop-opacity:1" />
+      <stop offset="100%" style="stop-color:rgb(89, 149, 191);stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="leaf-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:rgb(134, 239, 172);stop-opacity:1" />
+      <stop offset="50%" style="stop-color:rgb(96, 165, 250);stop-opacity:1" />
+      <stop offset="100%" style="stop-color:rgb(147, 197, 253);stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Filtro de brilho suave -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="115" fill="url(#bg-gradient)"/>
+  
+  <!-- Ondas de água (fundo) -->
+  <path d="M0 350 Q128 320 256 350 T512 350 L512 512 L0 512 Z" fill="rgba(255,255,255,0.1)"/>
+  <path d="M0 380 Q128 360 256 380 T512 380 L512 512 L0 512 Z" fill="rgba(255,255,255,0.05)"/>
+  
+  <!-- Folha principal (aquarela style) -->
+  <g filter="url(#glow)">
+    <!-- Folha base -->
+    <path d="M256 120 
+             C256 120 320 140 350 200 
+             C380 260 370 320 340 360
+             C310 400 256 420 256 420
+             C256 420 202 400 172 360
+             C142 320 132 260 162 200
+             C192 140 256 120 256 120 Z" 
+          fill="url(#leaf-gradient)" 
+          opacity="0.9"/>
+    
+    <!-- Nervura central -->
+    <line x1="256" y1="120" x2="256" y2="420" 
+          stroke="rgba(255,255,255,0.6)" 
+          stroke-width="4" 
+          stroke-linecap="round"/>
+    
+    <!-- Nervuras laterais (esquerda) -->
+    <path d="M256 180 Q220 200 200 230" 
+          stroke="rgba(255,255,255,0.4)" 
+          stroke-width="2" 
+          stroke-linecap="round" 
+          fill="none"/>
+    <path d="M256 240 Q220 260 210 290" 
+          stroke="rgba(255,255,255,0.4)" 
+          stroke-width="2" 
+          stroke-linecap="round" 
+          fill="none"/>
+    <path d="M256 300 Q220 320 215 350" 
+          stroke="rgba(255,255,255,0.4)" 
+          stroke-width="2" 
+          stroke-linecap="round" 
+          fill="none"/>
+    
+    <!-- Nervuras laterais (direita) -->
+    <path d="M256 180 Q292 200 312 230" 
+          stroke="rgba(255,255,255,0.4)" 
+          stroke-width="2" 
+          stroke-linecap="round" 
+          fill="none"/>
+    <path d="M256 240 Q292 260 302 290" 
+          stroke="rgba(255,255,255,0.4)" 
+          stroke-width="2" 
+          stroke-linecap="round" 
+          fill="none"/>
+    <path d="M256 300 Q292 320 297 350" 
+          stroke="rgba(255,255,255,0.4)" 
+          stroke-width="2" 
+          stroke-linecap="round" 
+          fill="none"/>
+  </g>
+  
+  <!-- Gotas de água (detalhes) -->
+  <circle cx="200" cy="280" r="8" fill="rgba(255,255,255,0.6)" opacity="0.8"/>
+  <circle cx="312" cy="320" r="6" fill="rgba(255,255,255,0.6)" opacity="0.8"/>
+  <circle cx="240" cy="360" r="7" fill="rgba(255,255,255,0.6)" opacity="0.8"/>
+  
+  <!-- Brilho sutil no topo -->
+  <ellipse cx="256" cy="150" rx="60" ry="30" fill="rgba(255,255,255,0.2)"/>
+</svg>

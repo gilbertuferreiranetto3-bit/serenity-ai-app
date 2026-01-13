@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+/* Serenity AI - Design System */
+/* Tema: Spa Natural + Rio Sereno + Flutuação */
+/* Cores: Verde → Azul com variação light/dark */
+
+@theme {
+  /* Cores principais - Gradiente Verde → Azul */
+  --color-serenity-50: oklch(0.98 0.01 180);
+  --color-serenity-100: oklch(0.95 0.02 180);
+  --color-serenity-200: oklch(0.90 0.04 175);
+  --color-serenity-300: oklch(0.82 0.08 170);
+  --color-serenity-400: oklch(0.72 0.12 165);
+  --color-serenity-500: oklch(0.62 0.15 160); /* Verde-azulado principal */
+  --color-serenity-600: oklch(0.52 0.14 155);
+  --color-serenity-700: oklch(0.42 0.12 150);
+  --color-serenity-800: oklch(0.32 0.10 145);
+  --color-serenity-900: oklch(0.22 0.08 140);
+  --color-serenity-950: oklch(0.15 0.05 135);
+
+  /* Cores neutras - Spa natural */
+  --color-spa-50: oklch(0.99 0.005 160);
+  --color-spa-100: oklch(0.97 0.008 160);
+  --color-spa-200: oklch(0.93 0.012 160);
+  --color-spa-300: oklch(0.87 0.015 160);
+  --color-spa-400: oklch(0.75 0.018 160);
+  --color-spa-500: oklch(0.60 0.020 160);
+  --color-spa-600: oklch(0.48 0.018 160);
+  --color-spa-700: oklch(0.38 0.015 160);
+  --color-spa-800: oklch(0.28 0.012 160);
+  --color-spa-900: oklch(0.18 0.010 160);
+  --color-spa-950: oklch(0.12 0.008 160);
+
+  /* Cores de status */
+  --color-success: oklch(0.65 0.15 145); /* Verde calmo */
+  --color-warning: oklch(0.75 0.15 85); /* Amarelo suave */
+  --color-error: oklch(0.60 0.18 25); /* Vermelho suave */
+  --color-info: oklch(0.60 0.14 220); /* Azul informativo */
+
+  /* Raio de borda - Arredondado e suave */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --radius-full: 9999px;
+
+  /* Sombras - Suaves e naturais */
+  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.08), 0 2px 4px -2px oklch(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.08), 0 4px 6px -4px oklch(0 0 0 / 0.05);
+  --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.08), 0 8px 10px -6px oklch(0 0 0 / 0.05);
+  --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.15);
+}
+
+/* Reset e base */
+* {
+  @apply border-spa-200 dark:border-spa-800;
+}
+
+body {
+  @apply bg-spa-50 text-spa-900 dark:bg-spa-950 dark:text-spa-50;
+  @apply transition-colors duration-300;
+}
+
+/* Scrollbar customizada */
+::-webkit-scrollbar {
+  @apply w-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-spa-100 dark:bg-spa-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-serenity-400 dark:bg-serenity-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-serenity-500 dark:bg-serenity-500;
+}
+
+/* Animações suaves */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
+}
+
+.animate-wave {
+  animation: wave 3s ease-in-out infinite;
+}
+
+/* Utilitários customizados */
+.glass-effect {
+  @apply bg-white/10 dark:bg-spa-900/30 backdrop-blur-md;
+  @apply border border-white/20 dark:border-spa-700/30;
+}
+
+.card-spa {
+  @apply bg-white dark:bg-spa-900 rounded-2xl shadow-lg;
+  @apply border border-spa-200 dark:border-spa-800;
+  @apply transition-all duration-300;
+}
+
+.card-spa:hover {
+  @apply shadow-xl scale-[1.02];
+}
+
+.btn-primary {
+  @apply bg-gradient-to-r from-serenity-500 to-blue-500;
+  @apply text-white font-medium rounded-xl px-6 py-3;
+  @apply shadow-md hover:shadow-lg;
+  @apply transition-all duration-300;
+  @apply hover:scale-105 active:scale-95;
+}
+
+.btn-secondary {
+  @apply bg-spa-200 dark:bg-spa-800 text-spa-900 dark:text-spa-50;
+  @apply font-medium rounded-xl px-6 py-3;
+  @apply shadow-sm hover:shadow-md;
+  @apply transition-all duration-300;
+  @apply hover:scale-105 active:scale-95;
+}
+
+.input-spa {
+  @apply bg-white dark:bg-spa-900 border-2 border-spa-300 dark:border-spa-700;
+  @apply rounded-xl px-4 py-3 text-spa-900 dark:text-spa-50;
+  @apply focus:border-serenity-500 focus:ring-2 focus:ring-serenity-500/20;
+  @apply transition-all duration-300;
+  @apply placeholder:text-spa-400 dark:placeholder:text-spa-600;
+}
+
+/* Gradientes de fundo */
+.bg-gradient-serenity {
+  @apply bg-gradient-to-br from-serenity-50 via-blue-50 to-spa-100;
+  @apply dark:from-spa-950 dark:via-serenity-950 dark:to-blue-950;
+}
+
+.bg-gradient-ocean {
+  @apply bg-gradient-to-br from-blue-400 via-serenity-500 to-blue-600;
+}
+
+/* Texto gradiente */
+.text-gradient {
+  @apply bg-gradient-to-r from-serenity-600 to-blue-600;
+  @apply dark:from-serenity-400 dark:to-blue-400;
+  @apply bg-clip-text text-transparent;
+}
