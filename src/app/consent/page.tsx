@@ -1,35 +1,136 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { acceptTerms } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import { t } from '@/lib/i18n'
-import { Leaf, Check } from 'lucide-react'
+import { Leaf, Check, AlertCircle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import type { Session } from '@supabase/supabase-js'
 
 export default function ConsentPage() {
   const router = useRouter()
-  const { user, language } = useAuth()
+  const { language, setUser, user } = useAuth()
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
   const [accepted, setAccepted] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  if (!user) {
-    router.push('/signin')
-    return null
-  }
+  // Carregar sessão ao montar componente
+  useEffect(() => {
+    if (!supabase) {
+      setError('Supabase não configurado')
+      setLoading(false)
+      return
+    }
+
+    // Obter sessão inicial
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setLoading(false)
+    })
+
+    // Escutar mudanças na autenticação
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session)
+        setLoading(false)
+      }
+    )
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [])
+
+  // Redirecionar se não autenticado
+  useEffect(() => {
+    if (!loading && !session) {
+      router.push('/signin')
+    }
+  }, [loading, session, router])
 
   const handleContinue = async () => {
     if (!accepted) return
 
-    setIsLoading(true)
-    const result = await acceptTerms(user.id)
+    setIsSubmitting(true)
+    setError(null)
 
-    if (result.success) {
+    try {
+      if (!supabase) {
+        throw new Error('Supabase não configurado')
+      }
+
+      // 1. Pegar session e user.id
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user?.id) {
+        throw new Error('Usuário não autenticado')
+      }
+      const userId = session.user.id
+
+      // 2. UPSERT do perfil + termos (resiliente)
+      const { error: upsertError } = await supabase.from('users').upsert({
+        id: userId,
+        email: session.user.email,
+        name: user?.name ?? '',
+        language: language ?? 'pt-BR',
+        has_accepted_terms: true,
+        accepted_terms_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' })
+
+      if (upsertError) {
+        throw new Error(`Erro ao salvar termos: ${upsertError.message}`)
+      }
+
+      // 3. Buscar perfil SEMPRE pelo id com maybeSingle()
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (profileError) {
+        throw new Error(`Erro ao buscar perfil: ${profileError.message}`)
+      }
+
+      // 4. Se profile ainda for null, exibir erro detalhado
+      if (!profile) {
+        throw new Error(
+          'Perfil não encontrado após atualização. Possível problema de sincronização. ' +
+          'Por favor, faça logout e login novamente.'
+        )
+      }
+
+      // 5. Atualizar AuthContext e navegar
+      setUser(profile)
       router.push('/home')
+    } catch (err: any) {
+      console.error('Erro ao aceitar termos:', err)
+      setError(err.message || 'Erro ao aceitar termos. Tente novamente.')
+      // NÃO redirecionar em caso de erro
+    } finally {
+      setIsSubmitting(false)
     }
+  }
 
-    setIsLoading(false)
+  // Tela de carregamento
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-serenity flex items-center justify-center p-4">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-serenity-600 dark:text-serenity-400 animate-spin mx-auto mb-4" />
+          <p className="text-spa-700 dark:text-spa-300">Carregando sessão...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Se não há sessão, não renderizar nada (redirecionamento em andamento)
+  if (!session) {
+    return null
   }
 
   return (
@@ -46,7 +147,7 @@ export default function ConsentPage() {
         {/* Card de Consentimento */}
         <div className="card-spa p-8">
           <h2 className="text-2xl font-semibold text-spa-900 dark:text-spa-50 mb-6">
-            Bem-vindo(a), {user.name}!
+            Bem-vindo(a)!
           </h2>
 
           {/* Disclaimer Principal */}
@@ -110,20 +211,43 @@ export default function ConsentPage() {
               type="checkbox"
               checked={accepted}
               onChange={(e) => setAccepted(e.target.checked)}
-              className="w-5 h-5 rounded border-2 border-spa-300 dark:border-spa-700 text-serenity-600 focus:ring-2 focus:ring-serenity-500/20 mt-0.5"
+              disabled={isSubmitting}
+              className="w-5 h-5 rounded border-2 border-spa-300 dark:border-spa-700 text-serenity-600 focus:ring-2 focus:ring-serenity-500/20 mt-0.5 disabled:opacity-50"
             />
             <span className="text-spa-700 dark:text-spa-300 text-sm">
               {t('compliance.acceptTerms', language as any)}
             </span>
           </label>
 
+          {/* Mensagem de Erro */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-red-800 dark:text-red-200 mb-2">{error}</p>
+                {error.includes('logout') && (
+                  <button
+                    onClick={async () => {
+                      await supabase?.auth.signOut()
+                      router.push('/signin')
+                    }}
+                    className="text-sm text-red-600 dark:text-red-400 underline hover:no-underline"
+                  >
+                    Fazer logout agora
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Botão Continuar */}
           <button
             onClick={handleContinue}
-            disabled={!accepted || isLoading}
-            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!accepted || isSubmitting || !session?.user?.id}
+            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {t('compliance.continue', language as any)}
+            {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
+            {isSubmitting ? 'Processando...' : t('compliance.continue', language as any)}
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { User, Subscription } from '@/lib/supabase'
+import { User, Subscription, supabase } from '@/lib/supabase'
 import { getUserSubscription, isPremium } from '@/lib/auth'
 
 type AuthContextType = {
@@ -12,6 +12,7 @@ type AuthContextType = {
   language: string
   setUser: (user: User | null) => void
   setLanguage: (lang: string) => void
+  refreshUser: () => Promise<void>
   logout: () => void
 }
 
@@ -22,6 +23,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [language, setLanguage] = useState('pt-BR')
+
+  // Função para buscar perfil atualizado do banco
+  const refreshUser = async () => {
+    if (!supabase) return
+
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      
+      if (!authUser) {
+        setUser(null)
+        setSubscription(null)
+        localStorage.removeItem('serenity_user')
+        return
+      }
+
+      // Buscar perfil atualizado do banco
+      const { data: profileData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      if (error) throw error
+
+      setUser(profileData)
+      setLanguage(profileData.language || 'pt-BR')
+      localStorage.setItem('serenity_user', JSON.stringify(profileData))
+
+      // Carregar assinatura
+      const sub = await getUserSubscription(profileData.id)
+      setSubscription(sub)
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error)
+      setUser(null)
+      setSubscription(null)
+      localStorage.removeItem('serenity_user')
+    }
+  }
 
   useEffect(() => {
     // Carregar usuário do localStorage
@@ -36,6 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSubscription(sub)
         setIsLoading(false)
       })
+
+      // Refresh do perfil para garantir dados atualizados
+      refreshUser()
     } else {
       setIsLoading(false)
     }
@@ -74,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       language,
       setUser: handleSetUser,
       setLanguage,
+      refreshUser,
       logout
     }}>
       {children}

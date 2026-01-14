@@ -1,77 +1,110 @@
 import { supabase } from './supabase'
-import bcrypt from 'bcryptjs'
 
-export async function signUp(email: string, password: string, name: string, language: string = 'pt-BR') {
+export async function signUp(email: string, password: string, name: string, language: string = 'pt-BR', theme: string = 'system') {
+  if (!supabase) {
+    return { user: null, error: 'Supabase não configurado' }
+  }
+
   try {
-    // Hash da senha
-    const password_hash = await bcrypt.hash(password, 10)
-    
-    // Criar usuário
-    const { data, error } = await supabase
-      .from('users')
-      .insert([{ 
-        email, 
-        password_hash, 
-        name, 
-        language,
-        has_accepted_terms: false 
-      }])
-      .select()
-      .single()
+    // Criar usuário no Supabase Auth
+    // O trigger no banco criará automaticamente o perfil em public.users
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          language,
+          has_accepted_terms: false,
+          theme
+        }
+      }
+    })
 
-    if (error) throw error
+    if (authError) throw authError
+    if (!authData.user) throw new Error('Erro ao criar usuário')
 
-    // Criar assinatura free inicial
-    await supabase
-      .from('subscriptions')
-      .insert([{
-        user_id: data.id,
-        status: 'trial',
-        plan: 'free',
-        provider: 'stripe',
-        trial_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 dias
-      }])
-
-    // Criar memória inicial
-    await supabase
-      .from('user_memory')
-      .insert([{
-        user_id: data.id,
-        memory_json: {}
-      }])
-
-    return { user: data, error: null }
+    // Retornar sucesso - o perfil será criado pela trigger
+    return { 
+      user: authData.user, 
+      error: null,
+      message: 'Conta criada com sucesso! Faça login para continuar.'
+    }
   } catch (error: any) {
-    return { user: null, error: error.message }
+    return { user: null, error: error.message || 'Erro ao criar conta' }
   }
 }
 
 export async function signIn(email: string, password: string) {
+  if (!supabase) {
+    return { user: null, error: 'Supabase não configurado' }
+  }
+
   try {
-    // Buscar usuário
-    const { data: user, error } = await supabase
+    // 1. Autenticar com Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (authError) throw authError
+    if (!authData.user) throw new Error('Credenciais inválidas')
+
+    // 2. Buscar perfil do usuário
+    const { data: profileData, error: profileError } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('id', authData.user.id)
       .single()
 
-    if (error || !user) {
-      throw new Error('Credenciais inválidas')
-    }
+    if (profileError) throw profileError
 
-    // Verificar senha
-    const isValid = await bcrypt.compare(password, user.password_hash)
-    if (!isValid) {
-      throw new Error('Credenciais inválidas')
-    }
-
-    return { user, error: null }
+    return { user: profileData, error: null }
   } catch (error: any) {
-    return { user: null, error: error.message }
+    return { user: null, error: 'Credenciais inválidas' }
+  }
+}
+
+export async function signOut() {
+  if (!supabase) {
+    return { error: 'Supabase não configurado' }
+  }
+
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+    return { error: null }
+  } catch (error: any) {
+    return { error: error.message }
+  }
+}
+
+export async function getCurrentUser() {
+  if (!supabase) {
+    return null
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+
+    const { data: profileData } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+
+    return profileData
+  } catch (error) {
+    return null
   }
 }
 
 export async function getUserSubscription(userId: string) {
+  if (!supabase) {
+    return null
+  }
+
   try {
     const { data, error } = await supabase
       .from('subscriptions')
@@ -122,10 +155,17 @@ export function isPremium(subscription: any): boolean {
 }
 
 export async function acceptTerms(userId: string) {
+  if (!supabase) {
+    return { success: false, error: 'Supabase não configurado' }
+  }
+
   try {
     const { error } = await supabase
       .from('users')
-      .update({ has_accepted_terms: true })
+      .update({ 
+        has_accepted_terms: true,
+        accepted_terms_at: new Date().toISOString()
+      })
       .eq('id', userId)
 
     if (error) throw error

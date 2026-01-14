@@ -11,6 +11,7 @@ export default function RootPage() {
   useEffect(() => {
     if (!isLoading) {
       if (user) {
+        // Verificar has_accepted_terms do banco (não user_metadata)
         if (!user.has_accepted_terms) {
           router.push('/consent')
         } else {

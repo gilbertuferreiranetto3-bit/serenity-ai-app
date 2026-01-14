@@ -1,9 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Verificação de variáveis de ambiente
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Console.log temporário para debug (apenas em dev)
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔍 SUPABASE URL exists?', !!supabaseUrl)
+  console.log('🔍 SUPABASE ANON_KEY exists?', !!supabaseAnonKey)
+}
+
+// Exportar null se as variáveis não estiverem configuradas
+export const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null
+
+// Helper para verificar se o Supabase está configurado
+export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey
 
 // Types para o banco de dados
 export type User = {
