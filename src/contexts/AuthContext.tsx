@@ -23,6 +23,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [language, setLanguage] = useState('pt-BR')
+  const [isPremiumFromPlan, setIsPremiumFromPlan] = useState(false)
+
+  // Função para verificar plano premium (user_plans)
+  const checkPremiumPlan = async (userId: string) => {
+    if (!supabase) return false
+
+    try {
+      const { data, error } = await supabase
+        .from('user_plans')
+        .select('is_premium, premium_until')
+        .eq('user_id', userId)
+        .single()
+
+      if (error || !data) return false
+
+      // Verificar se premium expirou
+      if (data.is_premium && data.premium_until) {
+        const premiumUntil = new Date(data.premium_until)
+        if (premiumUntil < new Date()) {
+          return false
+        }
+      }
+
+      return data.is_premium
+    } catch (error) {
+      console.error('Erro ao verificar plano premium:', error)
+      return false
+    }
+  }
 
   // Função para buscar perfil atualizado do banco
   const refreshUser = async () => {
@@ -34,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authUser) {
         setUser(null)
         setSubscription(null)
+        setIsPremiumFromPlan(false)
         localStorage.removeItem('serenity_user')
         return
       }
@@ -51,13 +81,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLanguage(profileData.language || 'pt-BR')
       localStorage.setItem('serenity_user', JSON.stringify(profileData))
 
-      // Carregar assinatura
+      // Carregar assinatura (subscriptions)
       const sub = await getUserSubscription(profileData.id)
       setSubscription(sub)
+
+      // Verificar plano premium (user_plans)
+      const premiumPlan = await checkPremiumPlan(profileData.id)
+      setIsPremiumFromPlan(premiumPlan)
     } catch (error) {
       console.error('Erro ao atualizar perfil:', error)
       setUser(null)
       setSubscription(null)
+      setIsPremiumFromPlan(false)
       localStorage.removeItem('serenity_user')
     }
   }
@@ -70,9 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(parsedUser)
       setLanguage(parsedUser.language || 'pt-BR')
       
-      // Carregar assinatura
-      getUserSubscription(parsedUser.id).then(sub => {
+      // Carregar assinatura e plano premium
+      Promise.all([
+        getUserSubscription(parsedUser.id),
+        checkPremiumPlan(parsedUser.id)
+      ]).then(([sub, premiumPlan]) => {
         setSubscription(sub)
+        setIsPremiumFromPlan(premiumPlan)
         setIsLoading(false)
       })
 
@@ -89,23 +128,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('serenity_user', JSON.stringify(newUser))
       setLanguage(newUser.language || 'pt-BR')
       
-      // Carregar assinatura
-      getUserSubscription(newUser.id).then(sub => {
+      // Carregar assinatura e plano premium
+      Promise.all([
+        getUserSubscription(newUser.id),
+        checkPremiumPlan(newUser.id)
+      ]).then(([sub, premiumPlan]) => {
         setSubscription(sub)
+        setIsPremiumFromPlan(premiumPlan)
       })
     } else {
       localStorage.removeItem('serenity_user')
       setSubscription(null)
+      setIsPremiumFromPlan(false)
     }
   }
 
   const logout = () => {
     setUser(null)
     setSubscription(null)
+    setIsPremiumFromPlan(false)
     localStorage.removeItem('serenity_user')
   }
 
-  const isPremiumUser = subscription ? isPremium(subscription) : false
+  // Usuário é premium se:
+  // 1. Tem assinatura ativa/trial (subscriptions) OU
+  // 2. Tem plano premium ativo (user_plans)
+  const isPremiumUser = isPremiumFromPlan || (subscription ? isPremium(subscription) : false)
 
   return (
     <AuthContext.Provider value={{

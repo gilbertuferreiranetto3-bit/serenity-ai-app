@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { t } from '@/lib/i18n'
-import { Leaf, MessageCircle, Wind, Music, BookOpen, User, AlertCircle, Sparkles } from 'lucide-react'
+import { Leaf, MessageCircle, Wind, Music, BookOpen, User, AlertCircle, Sparkles, Clock } from 'lucide-react'
 import Link from 'next/link'
+import { getLastBreathingSession, getWeeklyBreathingSessions, BREATH_MODES } from '@/lib/breathing'
 
 export default function HomePage() {
   const router = useRouter()
@@ -14,6 +15,8 @@ export default function HomePage() {
   const [mood, setMood] = useState(5)
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [lastBreath, setLastBreath] = useState<any>(null)
+  const [weeklyBreaths, setWeeklyBreaths] = useState(0)
 
   useEffect(() => {
     if (!user) {
@@ -23,8 +26,24 @@ export default function HomePage() {
 
     if (!user.has_accepted_terms) {
       router.push('/consent')
+      return
     }
+
+    // Carregar dados de respiração
+    loadBreathingData()
   }, [user, router])
+
+  const loadBreathingData = async () => {
+    if (!user) return
+
+    const [lastSession, weeklyCount] = await Promise.all([
+      getLastBreathingSession(user.id),
+      getWeeklyBreathingSessions(user.id)
+    ])
+
+    setLastBreath(lastSession)
+    setWeeklyBreaths(weeklyCount)
+  }
 
   if (!user) return null
 
@@ -58,6 +77,19 @@ export default function HomePage() {
     if (value <= 3) return 'from-error to-warning'
     if (value <= 6) return 'from-warning to-serenity-400'
     return 'from-serenity-400 to-blue-400'
+  }
+
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 60) return `há ${diffMins} min`
+    if (diffHours < 24) return `há ${diffHours}h`
+    return `há ${diffDays}d`
   }
 
   return (
@@ -147,6 +179,43 @@ export default function HomePage() {
           </button>
         </div>
 
+        {/* Breathing Stats */}
+        {(lastBreath || weeklyBreaths > 0) && (
+          <div className="card-spa p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Wind className="w-5 h-5 text-serenity-600 dark:text-serenity-400" />
+              <h3 className="font-bold text-spa-900 dark:text-spa-50">
+                Suas Respirações
+              </h3>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              {lastBreath && (
+                <div className="bg-spa-50 dark:bg-spa-800/50 rounded-lg p-4">
+                  <p className="text-xs text-spa-600 dark:text-spa-400 mb-1">
+                    Última respiração
+                  </p>
+                  <p className="font-semibold text-spa-900 dark:text-spa-50">
+                    {BREATH_MODES[lastBreath.mode as keyof typeof BREATH_MODES].name}
+                  </p>
+                  <p className="text-xs text-spa-500 dark:text-spa-500 mt-1">
+                    {formatRelativeTime(lastBreath.created_at)}
+                  </p>
+                </div>
+              )}
+              
+              <div className="bg-spa-50 dark:bg-spa-800/50 rounded-lg p-4">
+                <p className="text-xs text-spa-600 dark:text-spa-400 mb-1">
+                  Sessões na semana
+                </p>
+                <p className="text-2xl font-bold text-serenity-600 dark:text-serenity-400">
+                  {weeklyBreaths}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Link href="/chat">
@@ -188,13 +257,13 @@ export default function HomePage() {
             </div>
           </Link>
 
-          <Link href="/journal">
+          <Link href="/diary">
             <div className="card-spa p-6 text-center cursor-pointer group">
               <div className="w-12 h-12 bg-gradient-to-r from-serenity-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                 <BookOpen className="w-6 h-6 text-white" />
               </div>
               <h3 className="font-semibold text-spa-900 dark:text-spa-50">
-                {t('nav.journal', language as any)}
+                Diário Emocional
               </h3>
             </div>
           </Link>

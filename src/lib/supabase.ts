@@ -87,3 +87,14 @@ export type AudioTrack = {
   is_premium: boolean
   created_at: string
 }
+
+export type BreathingSession = {
+  id: string
+  user_id: string
+  mode: 'calm' | 'anxiety' | 'sleep'
+  started_at: string
+  duration_seconds: number | null
+  completed: boolean
+  feedback: 'better' | 'same' | 'worse' | null
+  created_at: string
+}

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Send, ArrowLeft, Sparkles, AlertCircle } from 'lucide-react'
+import { Send, ArrowLeft, Sparkles, AlertCircle, Crown } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
@@ -20,7 +20,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isSending, setIsSending] = useState(false)
   const [showLimitModal, setShowLimitModal] = useState(false)
+  const [remainingMessages, setRemainingMessages] = useState<number | null>(null)
+  const [chatLimit, setChatLimit] = useState(5)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Redirecionar se não estiver autenticado
@@ -56,29 +59,14 @@ export default function ChatPage() {
   }, [user])
 
   const handleSendMessage = async () => {
-    if (!input.trim() || !user || !supabase || isLoading) return
+    if (!input.trim() || !user || !supabase || isLoading || isSending) return
 
     const userMessage = input.trim()
     setInput('')
     setIsLoading(true)
+    setIsSending(true)
 
     try {
-      // 🚨 VALIDAÇÃO DE LIMITE - Chamar RPC consume_chat_message
-      const { data: limitCheck, error: limitError } = await supabase
-        .rpc('consume_chat_message', { p_user_id: user.id })
-
-      if (limitError) {
-        console.error('Erro ao verificar limite:', limitError)
-        throw new Error('Erro ao verificar limite de mensagens')
-      }
-
-      // Se allowed = false, mostrar modal de limite
-      if (!limitCheck?.allowed) {
-        setShowLimitModal(true)
-        setIsLoading(false)
-        return
-      }
-
       // Adicionar mensagem do usuário
       const newUserMessage: Message = {
         id: crypto.randomUUID(),
@@ -96,36 +84,130 @@ export default function ChatPage() {
         session_id: crypto.randomUUID()
       })
 
-      // Simular resposta da IA (substituir por chamada real à API)
-      setTimeout(async () => {
-        const aiResponse: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: 'Olá! Estou aqui para te ajudar. Como você está se sentindo hoje?',
-          created_at: new Date().toISOString()
-        }
-        setMessages(prev => [...prev, aiResponse])
+      // 🤖 CHAMAR API DO CHAT (com token de autenticação)
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('Sessão expirada. Faça login novamente.')
+      }
 
-        // Salvar resposta da IA no banco
-        await supabase.from('chat_messages').insert({
-          user_id: user.id,
-          role: 'assistant',
-          content: aiResponse.content,
-          session_id: crypto.randomUUID()
-        })
+      const messagesToSend = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }))
+      
+      messagesToSend.push({
+        role: 'user',
+        content: userMessage
+      })
 
+      console.log('📤 [Chat Frontend] Enviando para API:', {
+        messagesCount: messagesToSend.length,
+        lastMessage: userMessage.substring(0, 50)
+      })
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ messages: messagesToSend })
+      })
+
+      // 🔒 LEITURA SEGURA: text() + JSON.parse() para evitar erro "Unexpected token '<'"
+      const responseText = await response.text()
+      let responseData: any
+
+      try {
+        responseData = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error('❌ [Chat Frontend] API retornou não-JSON:', responseText.slice(0, 300))
+        throw new Error('API retornou HTML em vez de JSON. Verifique se a rota /api/chat existe.')
+      }
+
+      // 🚨 LIMITE ATINGIDO
+      if (response.status === 429 || responseData.error === 'LIMIT_REACHED') {
+        console.warn('⚠️ [Chat Frontend] Limite atingido:', responseData)
+        setShowLimitModal(true)
+        setRemainingMessages(0)
         setIsLoading(false)
-      }, 1000)
+        setIsSending(false)
+        return
+      }
 
-    } catch (error) {
-      console.error('Erro ao enviar mensagem:', error)
+      // ❌ ERRO DA API
+      if (!response.ok) {
+        console.error('❌ [Chat Frontend] Erro da API:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: responseData
+        })
+        
+        const errorMessage = responseData.error || responseData.message || 'Erro ao chamar IA'
+        throw new Error(errorMessage)
+      }
+
+      const { reply, remaining, limit } = responseData
+
+      console.log('✅ [Chat Frontend] Resposta recebida:', {
+        replyLength: reply?.length || 0,
+        preview: reply?.substring(0, 100) || '',
+        remaining
+      })
+
+      // Validar resposta
+      if (!reply) {
+        throw new Error('API não retornou resposta válida')
+      }
+
+      // Atualizar contador
+      if (remaining !== undefined && remaining !== -1) {
+        setRemainingMessages(remaining)
+        setChatLimit(limit || 5)
+      } else if (remaining === -1) {
+        setRemainingMessages(null) // Premium (ilimitado)
+      }
+
+      // Adicionar resposta da IA
+      const aiResponse: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: reply,
+        created_at: new Date().toISOString()
+      }
+      setMessages(prev => [...prev, aiResponse])
+
+      // Salvar resposta da IA no banco
+      await supabase.from('chat_messages').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: reply,
+        session_id: crypto.randomUUID()
+      })
+
       setIsLoading(false)
-      alert('Erro ao enviar mensagem. Tente novamente.')
+      setIsSending(false)
+
+    } catch (error: any) {
+      console.error('❌ [Chat Frontend] Erro ao enviar mensagem:', {
+        message: error.message,
+        stack: error.stack
+      })
+      setIsLoading(false)
+      setIsSending(false)
+      
+      // Mensagem amigável para o usuário
+      const friendlyMessage = error.message.includes('HTML em vez de JSON')
+        ? 'Erro de comunicação com o servidor. Tente novamente em alguns instantes.'
+        : error.message || 'Erro desconhecido ao processar sua mensagem.'
+      
+      alert(`❌ ${friendlyMessage}`)
     }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isSending) {
       e.preventDefault()
       handleSendMessage()
     }
@@ -134,6 +216,13 @@ export default function ChatPage() {
   if (!user) {
     return null
   }
+
+  // Exibir contador
+  const displayRemaining = isPremiumUser 
+    ? '∞' 
+    : remainingMessages !== null 
+      ? remainingMessages 
+      : chatLimit
 
   return (
     <div className="min-h-screen bg-gradient-serenity flex flex-col">
@@ -152,7 +241,21 @@ export default function ChatPage() {
               Chat IA Empática
             </h1>
           </div>
-          <div className="w-20"></div>
+          <div className="flex items-center gap-2">
+            {isPremiumUser ? (
+              <div className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full">
+                <Crown className="w-4 h-4 text-white" />
+                <span className="text-xs font-bold text-white">Ilimitado</span>
+              </div>
+            ) : (
+              <div className="text-sm text-spa-600 dark:text-spa-400">
+                <span className="font-bold text-purple-600 dark:text-purple-400">
+                  {displayRemaining}
+                </span>
+                {' '}restantes
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -170,7 +273,7 @@ export default function ChatPage() {
               </p>
               {!isPremiumUser && (
                 <p className="text-sm text-spa-500 dark:text-spa-500 mt-4">
-                  Plano gratuito: 5 mensagens por dia
+                  Plano gratuito: {chatLimit} mensagens por dia
                 </p>
               )}
             </div>
@@ -220,11 +323,11 @@ export default function ChatPage() {
               placeholder="Digite sua mensagem..."
               className="flex-1 resize-none rounded-2xl px-4 py-3 bg-white dark:bg-spa-900 border border-spa-300 dark:border-spa-600 text-spa-900 dark:text-spa-50 placeholder-spa-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
               rows={1}
-              disabled={isLoading}
+              disabled={isSending}
             />
             <button
               onClick={handleSendMessage}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isSending}
               className="btn-primary px-6 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send className="w-5 h-5" />
@@ -246,13 +349,25 @@ export default function ChatPage() {
             </h2>
             
             <p className="text-spa-600 dark:text-spa-400 mb-6">
-              Você atingiu o limite grátis de <strong>5 mensagens por dia</strong>. 
+              Você atingiu o limite grátis de <strong>{chatLimit} mensagens por dia</strong>. 
               Assine o Premium para uso ilimitado.
             </p>
 
+            <div className="bg-spa-50 dark:bg-spa-900/50 rounded-xl p-4 mb-6">
+              <p className="text-sm font-semibold text-spa-700 dark:text-spa-300 mb-2">
+                ✨ Com Premium você tem:
+              </p>
+              <ul className="text-sm text-spa-600 dark:text-spa-400 space-y-1 text-left">
+                <li>• Chat ilimitado com IA empática</li>
+                <li>• Acesso a todos os sons premium</li>
+                <li>• Recursos exclusivos</li>
+              </ul>
+            </div>
+
             <div className="flex flex-col gap-3">
               <Link href="/subscribe">
-                <button className="btn-primary w-full">
+                <button className="btn-primary w-full flex items-center justify-center gap-2">
+                  <Crown className="w-5 h-5" />
                   Assinar Premium
                 </button>
               </Link>
