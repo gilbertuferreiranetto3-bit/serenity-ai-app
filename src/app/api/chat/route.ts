@@ -42,44 +42,76 @@ Se houver menção de autoagressão/suicídio/violência/risco iminente:
 Seja genuíno, empático e sempre responda diretamente ao que o usuário escreveu.`
 
 export async function POST(req: NextRequest) {
+  console.log('🔵 [API Chat] Rota /api/chat foi chamada')
+
   try {
-    // 🔒 Validação de autenticação
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
-      console.error('❌ [API Chat] Requisição sem token de autenticação')
+    // ✅ VALIDAÇÃO: Verificar se OPENAI_API_KEY existe
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ [API Chat] OPENAI_API_KEY não configurada')
       return NextResponse.json(
-        { error: 'Not authenticated', message: 'Token de autenticação não fornecido' },
-        { status: 401 }
+        { 
+          error: { 
+            message: 'OPENAI_API_KEY missing',
+            details: 'Chave da OpenAI não está configurada no servidor'
+          } 
+        },
+        { status: 500 }
       )
     }
 
-    // Parse do body
+    // ✅ VALIDAÇÃO: Parse do body
     let body: any
     try {
       body = await req.json()
-    } catch (parseError) {
-      console.error('❌ [API Chat] Erro ao fazer parse do body:', parseError)
+      console.log('📦 [API Chat] Body recebido - keys:', Object.keys(body || {}))
+    } catch (parseError: any) {
+      console.error('❌ [API Chat] Erro ao fazer parse do body:', parseError.message)
       return NextResponse.json(
-        { error: 'Invalid JSON', message: 'Corpo da requisição não é um JSON válido' },
+        { 
+          error: { 
+            message: 'Invalid JSON',
+            details: 'Corpo da requisição não é um JSON válido'
+          } 
+        },
         { status: 400 }
       )
     }
 
     const { messages } = body
 
-    // Validação: messages deve existir e ser array
+    // ✅ VALIDAÇÃO: messages deve existir e ser array
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      console.error('❌ [API Chat] Requisição inválida:', { messages })
+      console.error('❌ [API Chat] Requisição inválida - messages:', messages)
       return NextResponse.json(
-        { error: 'Invalid request', message: 'messages é obrigatório e deve ser um array não vazio' },
+        { 
+          error: { 
+            message: 'Invalid request',
+            details: 'messages é obrigatório e deve ser um array não vazio'
+          } 
+        },
         { status: 400 }
       )
     }
 
-    console.log('📨 [API Chat] Requisição recebida:', {
+    console.log('📨 [API Chat] Requisição válida:', {
       messagesCount: messages.length,
       lastMessage: messages[messages.length - 1]?.content?.substring(0, 50)
     })
+
+    // 🔒 VALIDAÇÃO: Autenticação
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
+      console.error('❌ [API Chat] Requisição sem token de autenticação')
+      return NextResponse.json(
+        { 
+          error: { 
+            message: 'Not authenticated',
+            details: 'Token de autenticação não fornecido'
+          } 
+        },
+        { status: 401 }
+      )
+    }
 
     // Criar cliente Supabase com token do usuário
     const token = authHeader.replace('Bearer ', '')
@@ -104,9 +136,10 @@ export async function POST(req: NextRequest) {
       })
       return NextResponse.json(
         { 
-          error: 'Database error', 
-          message: 'Erro ao verificar limite de mensagens',
-          details: allowanceError.message 
+          error: { 
+            message: 'Database error',
+            details: `Erro ao verificar limite de mensagens: ${allowanceError.message}`
+          }
         },
         { status: 500 }
       )
@@ -162,6 +195,7 @@ export async function POST(req: NextRequest) {
       remaining: allowanceData.remaining
     })
 
+    // ✅ SEMPRE RETORNAR JSON
     return NextResponse.json({ 
       reply,
       remaining: allowanceData.remaining,
@@ -178,14 +212,37 @@ export async function POST(req: NextRequest) {
       details: error?.response?.data
     })
 
-    // SEMPRE retornar JSON, nunca HTML
+    // ✅ SEMPRE RETORNAR JSON, NUNCA HTML
     return NextResponse.json(
       { 
-        error: 'Internal error',
-        message: error?.message || 'Erro ao processar mensagem',
-        details: error?.code || 'UNKNOWN_ERROR'
+        error: { 
+          message: error?.message || 'Internal error',
+          details: String(error)
+        }
       },
       { status: 500 }
     )
   }
+}
+
+// ✅ BLOQUEAR OUTROS MÉTODOS (GET, PUT, DELETE, etc)
+export async function GET() {
+  return NextResponse.json(
+    { error: { message: 'Method not allowed', details: 'Use POST para enviar mensagens' } },
+    { status: 405 }
+  )
+}
+
+export async function PUT() {
+  return NextResponse.json(
+    { error: { message: 'Method not allowed', details: 'Use POST para enviar mensagens' } },
+    { status: 405 }
+  )
+}
+
+export async function DELETE() {
+  return NextResponse.json(
+    { error: { message: 'Method not allowed', details: 'Use POST para enviar mensagens' } },
+    { status: 405 }
+  )
 }

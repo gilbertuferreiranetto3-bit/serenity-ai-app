@@ -102,11 +102,14 @@ export default function ChatPage() {
       })
 
       console.log('📤 [Chat Frontend] Enviando para API:', {
+        url: '/api/chat',
+        method: 'POST',
         messagesCount: messagesToSend.length,
         lastMessage: userMessage.substring(0, 50)
       })
 
-      const response = await fetch('/api/chat', {
+      // ✅ FETCH COM URL RELATIVA (NUNCA ABSOLUTA)
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,42 +118,69 @@ export default function ChatPage() {
         body: JSON.stringify({ messages: messagesToSend })
       })
 
-      // 🔒 LEITURA SEGURA: text() + JSON.parse() para evitar erro "Unexpected token '<'"
-      const responseText = await response.text()
-      let responseData: any
+      // ✅ LEITURA SEGURA: Pegar content-type e texto bruto primeiro
+      const contentType = res.headers.get('content-type') || ''
+      const raw = await res.text()
 
+      console.log('📥 [Chat Frontend] Resposta recebida:', {
+        status: res.status,
+        statusText: res.statusText,
+        contentType,
+        rawPreview: raw.substring(0, 200)
+      })
+
+      // ✅ TENTAR FAZER PARSE APENAS SE FOR JSON
+      let data: any = null
       try {
-        responseData = JSON.parse(responseText)
+        if (contentType.includes('application/json')) {
+          data = JSON.parse(raw)
+        }
       } catch (parseError) {
-        console.error('❌ [Chat Frontend] API retornou não-JSON:', responseText.slice(0, 300))
-        throw new Error('API retornou HTML em vez de JSON. Verifique se a rota /api/chat existe.')
+        console.error('❌ [Chat Frontend] Erro ao fazer parse de JSON:', parseError)
       }
 
-      // 🚨 LIMITE ATINGIDO
-      if (response.status === 429 || responseData.error === 'LIMIT_REACHED') {
-        console.warn('⚠️ [Chat Frontend] Limite atingido:', responseData)
-        setShowLimitModal(true)
-        setRemainingMessages(0)
-        setIsLoading(false)
-        setIsSending(false)
-        return
-      }
-
-      // ❌ ERRO DA API
-      if (!response.ok) {
-        console.error('❌ [Chat Frontend] Erro da API:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: responseData
+      // ❌ SE NÃO CONSEGUIU FAZER PARSE OU VEIO HTML
+      if (!data) {
+        console.error('❌ [Chat Frontend] API retornou não-JSON:', {
+          contentType,
+          raw: raw.slice(0, 300)
         })
-        
-        const errorMessage = responseData.error || responseData.message || 'Erro ao chamar IA'
+        throw new Error('API retornou HTML em vez de JSON. Verifique se a rota /api/chat existe e está configurada corretamente.')
+      }
+
+      // ❌ SE STATUS NÃO FOR OK
+      if (!res.ok) {
+        console.error('❌ [Chat Frontend] Chat API failed:', {
+          status: res.status,
+          statusText: res.statusText,
+          contentType,
+          raw: raw.slice(0, 300),
+          data
+        })
+
+        // 🚨 LIMITE ATINGIDO
+        if (res.status === 429 || data.error === 'LIMIT_REACHED') {
+          console.warn('⚠️ [Chat Frontend] Limite atingido:', data)
+          setShowLimitModal(true)
+          setRemainingMessages(0)
+          setIsLoading(false)
+          setIsSending(false)
+          return
+        }
+
+        // ❌ OUTROS ERROS
+        const errorMessage = data?.error?.message || data?.message || raw || `HTTP ${res.status}`
         throw new Error(errorMessage)
       }
 
-      const { reply, remaining, limit } = responseData
+      // ✅ VALIDAR SE DATA TEM CONTEÚDO
+      if (!data) {
+        throw new Error('API returned empty body')
+      }
 
-      console.log('✅ [Chat Frontend] Resposta recebida:', {
+      const { reply, remaining, limit } = data
+
+      console.log('✅ [Chat Frontend] Resposta processada:', {
         replyLength: reply?.length || 0,
         preview: reply?.substring(0, 100) || '',
         remaining
