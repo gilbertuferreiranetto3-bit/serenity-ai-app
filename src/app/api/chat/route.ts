@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+// ✅ VALIDAÇÃO: Verificar se OPENAI_API_KEY existe ANTES de criar cliente
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
 // Cliente Supabase server-side
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -45,17 +44,15 @@ export async function POST(req: NextRequest) {
   console.log('🔵 [API Chat] Rota /api/chat foi chamada')
 
   try {
-    // ✅ VALIDAÇÃO: Verificar se OPENAI_API_KEY existe
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('❌ [API Chat] OPENAI_API_KEY não configurada')
+    // ✅ VALIDAÇÃO CRÍTICA: Verificar se OPENAI_API_KEY existe
+    if (!OPENAI_API_KEY || OPENAI_API_KEY.trim() === '') {
+      console.error('❌ [API Chat] OPENAI_API_KEY não configurada ou vazia')
       return NextResponse.json(
         { 
-          error: { 
-            message: 'OPENAI_API_KEY missing',
-            details: 'Chave da OpenAI não está configurada no servidor'
-          } 
+          error: 'OPENAI_KEY_MISSING',
+          message: '🔑 A chave da OpenAI não está configurada. Por favor, adicione OPENAI_API_KEY nas variáveis de ambiente do projeto.'
         },
-        { status: 500 }
+        { status: 503 }
       )
     }
 
@@ -68,10 +65,8 @@ export async function POST(req: NextRequest) {
       console.error('❌ [API Chat] Erro ao fazer parse do body:', parseError.message)
       return NextResponse.json(
         { 
-          error: { 
-            message: 'Invalid JSON',
-            details: 'Corpo da requisição não é um JSON válido'
-          } 
+          error: 'Invalid JSON',
+          message: 'Corpo da requisição não é um JSON válido'
         },
         { status: 400 }
       )
@@ -84,10 +79,8 @@ export async function POST(req: NextRequest) {
       console.error('❌ [API Chat] Requisição inválida - messages:', messages)
       return NextResponse.json(
         { 
-          error: { 
-            message: 'Invalid request',
-            details: 'messages é obrigatório e deve ser um array não vazio'
-          } 
+          error: 'Invalid request',
+          message: 'messages é obrigatório e deve ser um array não vazio'
         },
         { status: 400 }
       )
@@ -104,10 +97,8 @@ export async function POST(req: NextRequest) {
       console.error('❌ [API Chat] Requisição sem token de autenticação')
       return NextResponse.json(
         { 
-          error: { 
-            message: 'Not authenticated',
-            details: 'Token de autenticação não fornecido'
-          } 
+          error: 'Not authenticated',
+          message: 'Token de autenticação não fornecido'
         },
         { status: 401 }
       )
@@ -123,43 +114,95 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // 🚨 VALIDAÇÃO SERVER-SIDE: Verificar limite de mensagens (FREE vs PREMIUM)
-    const { data: allowanceData, error: allowanceError } = await supabaseWithAuth
-      .rpc('consume_chat_allowance', { p_message_count: 1 })
-
-    if (allowanceError) {
-      console.error('❌ [API Chat] Erro ao verificar allowance:', {
-        message: allowanceError.message,
-        code: allowanceError.code,
-        details: allowanceError.details,
-        hint: allowanceError.hint
-      })
+    // Obter usuário autenticado
+    const { data: { user }, error: userError } = await supabaseWithAuth.auth.getUser()
+    
+    if (userError || !user) {
+      console.error('❌ [API Chat] Erro ao obter usuário:', userError)
       return NextResponse.json(
         { 
-          error: { 
-            message: 'Database error',
-            details: `Erro ao verificar limite de mensagens: ${allowanceError.message}`
-          }
+          error: 'Not authenticated',
+          message: 'Usuário não autenticado'
         },
-        { status: 500 }
+        { status: 401 }
       )
     }
 
-    console.log('🔍 [API Chat] Allowance verificado:', allowanceData)
+    console.log('✅ [API Chat] Usuário autenticado:', user.id)
 
-    // Se não permitido (limite atingido)
-    if (!allowanceData.allowed) {
-      console.warn('⚠️ [API Chat] Limite atingido:', allowanceData)
-      return NextResponse.json(
-        {
-          error: 'LIMIT_REACHED',
-          message: 'Limite diário de mensagens atingido',
-          limit: allowanceData.limit,
-          used: allowanceData.used,
-          remaining: allowanceData.remaining
-        },
-        { status: 429 } // Too Many Requests
-      )
+    // 🚨 VALIDAÇÃO: Verificar limite de mensagens (FREE vs PREMIUM)
+    // Verificar se é premium através de user_plans
+    const { data: planData } = await supabaseWithAuth
+      .from('user_plans')
+      .select('is_premium, premium_until')
+      .eq('user_id', user.id)
+      .single()
+
+    const isPremium = planData?.is_premium && 
+      (!planData.premium_until || new Date(planData.premium_until) > new Date())
+
+    console.log('🔍 [API Chat] Status do plano:', { isPremium, planData })
+
+    let allowanceData: any = {
+      allowed: true,
+      remaining: -1,
+      used: 0,
+      limit: -1,
+      is_premium: isPremium
+    }
+
+    if (!isPremium) {
+      // Free: verificar daily_usage
+      const today = new Date().toISOString().split('T')[0]
+      
+      const { data: usageData } = await supabaseWithAuth
+        .from('daily_usage')
+        .select('chat_used')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .single()
+
+      const chatUsed = usageData?.chat_used || 0
+      const limit = 5
+
+      console.log('📊 [API Chat] Uso diário:', { chatUsed, limit, today })
+
+      if (chatUsed >= limit) {
+        // Limite atingido
+        console.warn('⚠️ [API Chat] Limite atingido')
+        return NextResponse.json(
+          {
+            error: 'LIMIT_REACHED',
+            message: 'Limite diário de mensagens atingido',
+            limit: limit,
+            used: chatUsed,
+            remaining: 0
+          },
+          { status: 429 }
+        )
+      }
+
+      // Incrementar contador
+      await supabaseWithAuth
+        .from('daily_usage')
+        .upsert({
+          user_id: user.id,
+          date: today,
+          chat_used: chatUsed + 1,
+          journal_used: 0
+        }, {
+          onConflict: 'user_id,date'
+        })
+
+      allowanceData = {
+        allowed: true,
+        remaining: limit - chatUsed - 1,
+        used: chatUsed + 1,
+        limit: limit,
+        is_premium: false
+      }
+
+      console.log('✅ [API Chat] Contador atualizado:', allowanceData)
     }
 
     // ✅ Permitido: processar mensagem normalmente
@@ -179,13 +222,48 @@ export async function POST(req: NextRequest) {
       systemPrompt: true
     })
 
-    // Chamar OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: messagesToSend as any,
-      temperature: 0.8,
-      max_tokens: 500
+    // ✅ Criar cliente OpenAI apenas se a chave existir
+    const openai = new OpenAI({
+      apiKey: OPENAI_API_KEY
     })
+
+    // Chamar OpenAI com tratamento de erro específico
+    let completion
+    try {
+      completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: messagesToSend as any,
+        temperature: 0.8,
+        max_tokens: 500
+      })
+    } catch (openaiError: any) {
+      console.error('❌ [API Chat] Erro da OpenAI:', {
+        status: openaiError?.status,
+        code: openaiError?.code,
+        type: openaiError?.type,
+        message: openaiError?.message
+      })
+
+      // Tratamento específico para erro 429 (quota exceeded)
+      if (openaiError?.status === 429 || openaiError?.code === 'insufficient_quota') {
+        return NextResponse.json(
+          { 
+            error: 'OPENAI_QUOTA_EXCEEDED',
+            message: '⚠️ A chave da OpenAI não tem créditos disponíveis.\n\n📋 Para resolver:\n1. Acesse https://platform.openai.com/account/billing\n2. Adicione créditos à sua conta OpenAI\n3. Ou configure uma nova chave API válida nas variáveis de ambiente (OPENAI_API_KEY)'
+          },
+          { status: 503 }
+        )
+      }
+
+      // Outros erros da OpenAI
+      return NextResponse.json(
+        { 
+          error: 'OPENAI_ERROR',
+          message: `Erro ao comunicar com a OpenAI: ${openaiError?.message || 'Erro desconhecido'}`
+        },
+        { status: 503 }
+      )
+    }
 
     const reply = completion.choices[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.'
 
@@ -195,13 +273,17 @@ export async function POST(req: NextRequest) {
       remaining: allowanceData.remaining
     })
 
-    // ✅ SEMPRE RETORNAR JSON
-    return NextResponse.json({ 
+    // ✅ SEMPRE RETORNAR JSON COM ESTRUTURA CORRETA
+    const response = { 
       reply,
       remaining: allowanceData.remaining,
       limit: allowanceData.limit,
       is_premium: allowanceData.is_premium
-    })
+    }
+
+    console.log('📤 [API Chat] Retornando resposta:', response)
+
+    return NextResponse.json(response)
 
   } catch (error: any) {
     console.error('❌ [API Chat] Erro completo:', {
@@ -209,16 +291,15 @@ export async function POST(req: NextRequest) {
       code: error?.code,
       stack: error?.stack,
       name: error?.name,
-      details: error?.response?.data
+      type: error?.type,
+      response: error?.response?.data
     })
 
     // ✅ SEMPRE RETORNAR JSON, NUNCA HTML
     return NextResponse.json(
       { 
-        error: { 
-          message: error?.message || 'Internal error',
-          details: String(error)
-        }
+        error: error?.message || 'Internal error',
+        message: 'Erro ao processar sua mensagem. Por favor, tente novamente.'
       },
       { status: 500 }
     )
@@ -228,21 +309,21 @@ export async function POST(req: NextRequest) {
 // ✅ BLOQUEAR OUTROS MÉTODOS (GET, PUT, DELETE, etc)
 export async function GET() {
   return NextResponse.json(
-    { error: { message: 'Method not allowed', details: 'Use POST para enviar mensagens' } },
+    { error: 'Method not allowed', message: 'Use POST para enviar mensagens' },
     { status: 405 }
   )
 }
 
 export async function PUT() {
   return NextResponse.json(
-    { error: { message: 'Method not allowed', details: 'Use POST para enviar mensagens' } },
+    { error: 'Method not allowed', message: 'Use POST para enviar mensagens' },
     { status: 405 }
   )
 }
 
 export async function DELETE() {
   return NextResponse.json(
-    { error: { message: 'Method not allowed', details: 'Use POST para enviar mensagens' } },
+    { error: 'Method not allowed', message: 'Use POST para enviar mensagens' },
     { status: 405 }
   )
 }

@@ -22,6 +22,8 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [showLimitModal, setShowLimitModal] = useState(false)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
   const [remainingMessages, setRemainingMessages] = useState<number | null>(null)
   const [chatLimit, setChatLimit] = useState(5)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -145,7 +147,7 @@ export default function ChatPage() {
           contentType,
           raw: raw.slice(0, 300)
         })
-        throw new Error('API retornou HTML em vez de JSON. Verifique se a rota /api/chat existe e está configurada corretamente.')
+        throw new Error('Erro de comunicação com o servidor. Por favor, tente novamente.')
       }
 
       // ❌ SE STATUS NÃO FOR OK
@@ -153,9 +155,9 @@ export default function ChatPage() {
         console.error('❌ [Chat Frontend] Chat API failed:', {
           status: res.status,
           statusText: res.statusText,
-          contentType,
-          raw: raw.slice(0, 300),
-          data
+          contentType: contentType,
+          rawPreview: raw.slice(0, 300),
+          parsedData: data
         })
 
         // 🚨 LIMITE ATINGIDO
@@ -169,13 +171,13 @@ export default function ChatPage() {
         }
 
         // ❌ OUTROS ERROS
-        const errorMessage = data?.error?.message || data?.message || raw || `HTTP ${res.status}`
+        const errorMessage = data?.error?.message || data?.message || 'Erro ao processar sua mensagem'
         throw new Error(errorMessage)
       }
 
       // ✅ VALIDAR SE DATA TEM CONTEÚDO
       if (!data) {
-        throw new Error('API returned empty body')
+        throw new Error('Servidor retornou resposta vazia')
       }
 
       const { reply, remaining, limit } = data
@@ -188,7 +190,7 @@ export default function ChatPage() {
 
       // Validar resposta
       if (!reply) {
-        throw new Error('API não retornou resposta válida')
+        throw new Error('Servidor não retornou resposta válida')
       }
 
       // Atualizar contador
@@ -228,11 +230,19 @@ export default function ChatPage() {
       setIsSending(false)
       
       // Mensagem amigável para o usuário
-      const friendlyMessage = error.message.includes('HTML em vez de JSON')
-        ? 'Erro de comunicação com o servidor. Tente novamente em alguns instantes.'
-        : error.message || 'Erro desconhecido ao processar sua mensagem.'
+      let friendlyMessage = error.message || 'Erro desconhecido ao processar sua mensagem.'
       
-      alert(`❌ ${friendlyMessage}`)
+      // Personalizar mensagens de erro
+      if (error.message.includes('HTML em vez de JSON') || error.message.includes('comunicação com o servidor')) {
+        friendlyMessage = 'Erro de comunicação com o servidor. Verifique sua conexão e tente novamente.'
+      } else if (error.message.includes('Sessão expirada')) {
+        friendlyMessage = 'Sua sessão expirou. Por favor, faça login novamente.'
+      } else if (error.message.includes('OPENAI_API_KEY')) {
+        friendlyMessage = 'Serviço temporariamente indisponível. Tente novamente em alguns instantes.'
+      }
+      
+      setErrorMessage(friendlyMessage)
+      setShowErrorModal(true)
     }
   }
 
@@ -408,6 +418,32 @@ export default function ChatPage() {
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Erro */}
+      {showErrorModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-spa-800 rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-10 h-10 text-white" />
+            </div>
+            
+            <h2 className="text-2xl font-bold text-spa-900 dark:text-spa-50 mb-3">
+              Ops! Algo deu errado
+            </h2>
+            
+            <p className="text-spa-600 dark:text-spa-400 mb-6">
+              {errorMessage}
+            </p>
+
+            <button
+              onClick={() => setShowErrorModal(false)}
+              className="btn-primary w-full"
+            >
+              Entendi
+            </button>
           </div>
         </div>
       )}
