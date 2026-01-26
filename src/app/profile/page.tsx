@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
@@ -11,36 +10,34 @@ import Link from 'next/link'
 export default function ProfilePage() {
   const router = useRouter()
   const { user, subscription, isPremiumUser, language, setLanguage, logout } = useAuth()
-  const [theme, setTheme] = useState('auto')
+
+  const [theme, setTheme] = useState<'auto' | 'light' | 'dark'>('auto')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  if (!user) {
-  import { useState, useEffect } from 'react'
-
-  }
+  // Redirect só no client (evita erro no build/SSR)
   useEffect(() => {
     if (!user) router.replace('/signin')
   }, [user, router])
 
-  if (!user) return null
+  // Enquanto carrega/redirecta
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-serenity flex items-center justify-center text-spa-900 dark:text-spa-50">
+        Carregando...
+      </div>
+    )
+  }
 
   const handleLogout = () => {
     logout()
     router.push('/signin')
   }
-  }, [user, router])
-
-if (!user) {
-  return null // ou uma tela "Carregando..."
-}
 
   const handleExportData = async () => {
-    // TODO: Implementar exportação de dados
     alert('Funcionalidade de exportação será implementada no Módulo 4')
   }
 
   const handleDeleteAccount = async () => {
-    // TODO: Implementar exclusão de conta
     if (showDeleteConfirm) {
       alert('Funcionalidade de exclusão será implementada no Módulo 4')
       setShowDeleteConfirm(false)
@@ -52,7 +49,10 @@ if (!user) {
   return (
     <div className="min-h-screen bg-gradient-serenity py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <Link href="/home" className="inline-flex items-center gap-2 text-serenity-600 dark:text-serenity-400 hover:underline mb-6">
+        <Link
+          href="/home"
+          className="inline-flex items-center gap-2 text-serenity-600 dark:text-serenity-400 hover:underline mb-6"
+        >
           <ArrowLeft className="w-4 h-4" />
           Voltar para Home
         </Link>
@@ -64,10 +64,9 @@ if (!user) {
               <User className="w-10 h-10 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-spa-900 dark:text-spa-50">
-                {user.name}
-              </h1>
+              <h1 className="text-2xl font-bold text-spa-900 dark:text-spa-50">{user.name}</h1>
               <p className="text-spa-600 dark:text-spa-400">{user.email}</p>
+
               {isPremiumUser && (
                 <div className="flex items-center gap-2 mt-2">
                   <Crown className="w-4 h-4 text-warning" />
@@ -91,11 +90,10 @@ if (!user) {
                     {subscription.status === 'expired' && t('sub.free', language as any)}
                   </p>
                 </div>
+
                 {!isPremiumUser && (
                   <Link href="/subscribe">
-                    <button className="btn-primary">
-                      {t('sub.upgrade', language as any)}
-                    </button>
+                    <button className="btn-primary">{t('sub.upgrade', language as any)}</button>
                   </Link>
                 )}
               </div>
@@ -137,7 +135,7 @@ if (!user) {
               </label>
               <select
                 value={theme}
-                onChange={(e) => setTheme(e.target.value)}
+                onChange={(e) => setTheme(e.target.value as any)}
                 className="input-spa w-full"
               >
                 <option value="auto">Automático (sistema)</option>
@@ -162,9 +160,7 @@ if (!user) {
               <div className="flex items-center gap-3">
                 <Download className="w-5 h-5 text-serenity-600 dark:text-serenity-400" />
                 <div className="text-left">
-                  <p className="font-medium text-spa-900 dark:text-spa-50">
-                    Exportar meus dados
-                  </p>
+                  <p className="font-medium text-spa-900 dark:text-spa-50">Exportar meus dados</p>
                   <p className="text-sm text-spa-600 dark:text-spa-400">
                     Baixar todos os seus dados em JSON
                   </p>
@@ -179,9 +175,7 @@ if (!user) {
               <div className="flex items-center gap-3">
                 <Trash2 className="w-5 h-5 text-error" />
                 <div className="text-left">
-                  <p className="font-medium text-error">
-                    Excluir minha conta
-                  </p>
+                  <p className="font-medium text-error">Excluir minha conta</p>
                   <p className="text-sm text-spa-600 dark:text-spa-400">
                     Ação permanente e irreversível
                   </p>
@@ -195,10 +189,7 @@ if (!user) {
                   ⚠️ Tem certeza? Todos os seus dados serão excluídos permanentemente.
                 </p>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="btn-secondary flex-1"
-                  >
+                  <button onClick={() => setShowDeleteConfirm(false)} className="btn-secondary flex-1">
                     Cancelar
                   </button>
                   <button
