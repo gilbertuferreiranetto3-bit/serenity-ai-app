@@ -1,197 +1,108 @@
 'use client'
 
-import Link from 'next/link'
-import { ArrowLeft, Crown, Check } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 export default function SubscribePage() {
-  const { user, isPremiumUser } = useAuth()
+  const [loading, setLoading] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const success = searchParams.get('success')
+  const canceled = searchParams.get('canceled')
 
-  if (isPremiumUser) {
-    return (
-      <div className="min-h-screen bg-gradient-serenity flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <div className="card-spa p-8 text-center">
-            <div className="w-20 h-20 bg-gradient-ocean rounded-full flex items-center justify-center mx-auto mb-6">
-              <Crown className="w-10 h-10 text-white" />
-            </div>
-            
-            <h1 className="text-2xl font-bold text-spa-900 dark:text-spa-50 mb-3">
-              Você já é Premium! 🎉
-            </h1>
-            
-            <p className="text-spa-600 dark:text-spa-400 mb-6">
-              Aproveite todos os recursos ilimitados do Serenity AI.
-            </p>
+  const handleSubscribe = async (plan: string) => {
+    setLoading(plan)
+    try {
+      const response = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      })
 
-            <Link href="/home">
-              <button className="btn-primary w-full">
-                Voltar para Home
-              </button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    )
+      if (!response.ok) {
+        throw new Error('Failed to create checkout session')
+      }
+
+      const { url } = await response.json()
+      window.location.href = url
+    } catch (error) {
+      console.error('Checkout error:', error)
+      alert('Erro ao processar pagamento. Tente novamente.')
+    } finally {
+      setLoading(null)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-serenity py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <Link href="/home" className="inline-flex items-center gap-2 text-serenity-600 dark:text-serenity-400 hover:underline mb-6">
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para Home
-        </Link>
-
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gradient mb-3">
-            Assine o Serenity AI Premium
-          </h1>
-          <p className="text-lg text-spa-600 dark:text-spa-400">
-            7 dias grátis, depois escolha seu plano
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-4xl w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">Assinar Premium</h1>
+          <p className="text-xl text-gray-600">
+            Desbloqueie recursos ilimitados e transforme sua jornada de bem-estar
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {/* Plano Mensal */}
-          <div className="card-spa p-8 border-2 border-serenity-300 dark:border-serenity-700">
-            <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold text-spa-900 dark:text-spa-50 mb-2">
-                Mensal
-              </h3>
-              <div className="text-4xl font-bold text-gradient mb-2">
-                R$ 49,90
-              </div>
-              <p className="text-sm text-spa-600 dark:text-spa-400">
-                por mês
-              </p>
-            </div>
+        {success && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+            Pagamento realizado com sucesso! Seu plano premium foi ativado.
+          </div>
+        )}
 
-            <ul className="space-y-3 mb-8">
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Chat IA ilimitado</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Todos os sons premium</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Diário ilimitado</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Gráficos avançados</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Exportar dados</span>
-              </li>
-            </ul>
+        {canceled && (
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6">
+            Pagamento cancelado. Você pode tentar novamente quando quiser.
+          </div>
+        )}
 
-            <button className="btn-primary w-full">
-              Começar Trial 7 Dias
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Mensal */}
+          <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-gray-200 hover:border-blue-300 transition-colors">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Mensal</h2>
+            <div className="text-3xl font-bold text-blue-600 mb-4">R$ 50,00</div>
+            <p className="text-gray-600 mb-6">Cobrança recorrente mensal via cartão</p>
+            <button
+              onClick={() => handleSubscribe('monthly')}
+              disabled={loading === 'monthly'}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === 'monthly' ? 'Processando...' : 'Assinar Mensal'}
             </button>
           </div>
 
-          {/* Plano Anual */}
-          <div className="card-spa p-8 border-2 border-warning bg-gradient-to-br from-warning/5 to-serenity-50 dark:from-warning/10 dark:to-serenity-950">
-            <div className="inline-block bg-warning text-white text-xs font-bold px-3 py-1 rounded-full mb-4">
-              ECONOMIZE 33%
-            </div>
-            
-            <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold text-spa-900 dark:text-spa-50 mb-2">
-                Anual
-              </h3>
-              <div className="text-4xl font-bold text-gradient mb-2">
-                R$ 399
-              </div>
-              <p className="text-sm text-spa-600 dark:text-spa-400">
-                por ano (R$ 33,25/mês)
-              </p>
-            </div>
+          {/* Anual Cartão */}
+          <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-gray-200 hover:border-blue-300 transition-colors">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Anual</h2>
+            <div className="text-3xl font-bold text-blue-600 mb-4">R$ 500,00</div>
+            <p className="text-gray-600 mb-6">Cobrança recorrente anual via cartão</p>
+            <button
+              onClick={() => handleSubscribe('yearly_card')}
+              disabled={loading === 'yearly_card'}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === 'yearly_card' ? 'Processando...' : 'Assinar Anual'}
+            </button>
+          </div>
 
-            <ul className="space-y-3 mb-8">
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Tudo do plano mensal</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300 font-semibold">Economize R$ 200/ano</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Suporte prioritário</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-5 h-5 text-serenity-600 dark:text-serenity-400 flex-shrink-0 mt-0.5" />
-                <span className="text-spa-700 dark:text-spa-300">Acesso antecipado a novos recursos</span>
-              </li>
-            </ul>
-
-            <button className="btn-primary w-full bg-gradient-to-r from-warning to-serenity-500">
-              Começar Trial 7 Dias
+          {/* Anual Pix */}
+          <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-green-200 hover:border-green-300 transition-colors relative">
+            <div className="absolute top-4 right-4 bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-semibold">
+              Mais Econômico
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Anual Pix</h2>
+            <div className="text-3xl font-bold text-green-600 mb-4">R$ 475,00</div>
+            <p className="text-gray-600 mb-6">Pagamento único via Pix (sem recorrência)</p>
+            <button
+              onClick={() => handleSubscribe('yearly_pix')}
+              disabled={loading === 'yearly_pix'}
+              className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === 'yearly_pix' ? 'Processando...' : 'Assinar com Pix'}
             </button>
           </div>
         </div>
 
-        {/* FAQ */}
-        <div className="card-spa p-8">
-          <h2 className="text-2xl font-bold text-spa-900 dark:text-spa-50 mb-6">
-            Perguntas Frequentes
-          </h2>
-
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-semibold text-spa-900 dark:text-spa-50 mb-2">
-                Como funciona o trial de 7 dias?
-              </h3>
-              <p className="text-spa-600 dark:text-spa-400 text-sm">
-                Você tem acesso completo a todos os recursos Premium por 7 dias gratuitamente. 
-                Após o período, será cobrado automaticamente. Você pode cancelar a qualquer momento.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-spa-900 dark:text-spa-50 mb-2">
-                Posso cancelar quando quiser?
-              </h3>
-              <p className="text-spa-600 dark:text-spa-400 text-sm">
-                Sim! Você pode cancelar sua assinatura a qualquer momento. Você continuará tendo 
-                acesso Premium até o final do período pago.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-spa-900 dark:text-spa-50 mb-2">
-                Quais são as formas de pagamento?
-              </h3>
-              <p className="text-spa-600 dark:text-spa-400 text-sm">
-                Aceitamos cartão de crédito via Stripe (web) e Apple Pay/Google Pay (apps mobile).
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-spa-900 dark:text-spa-50 mb-2">
-                Meus dados estão seguros?
-              </h3>
-              <p className="text-spa-600 dark:text-spa-400 text-sm">
-                Sim! Usamos criptografia de ponta a ponta e não compartilhamos seus dados com terceiros. 
-                Veja nossa <Link href="/privacy" className="text-serenity-600 dark:text-serenity-400 hover:underline">Política de Privacidade</Link>.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Nota sobre IAP */}
-        <div className="mt-6 text-center text-sm text-spa-600 dark:text-spa-400">
-          <p>
-            💡 <strong>Nota:</strong> Pagamentos via Stripe (web) estão prontos. 
-            Para apps iOS/Android, será necessário implementar Apple IAP e Google Play Billing.
-          </p>
+        <div className="mt-8 text-center text-gray-500">
+          <p>Suporte 24/7 • Cancelamento a qualquer momento • Sem taxas ocultas</p>
         </div>
       </div>
     </div>

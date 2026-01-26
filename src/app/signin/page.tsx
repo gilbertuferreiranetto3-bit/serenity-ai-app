@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { signIn } from '@/lib/auth'
 import { useAuth } from '@/contexts/AuthContext'
 import { t } from '@/lib/i18n'
 import { Leaf, Loader2 } from 'lucide-react'
@@ -10,7 +9,7 @@ import Link from 'next/link'
 
 export default function SignInPage() {
   const router = useRouter()
-  const { setUser, language } = useAuth()
+  const { setUser, language, login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -21,7 +20,7 @@ export default function SignInPage() {
     setError('')
     setIsLoading(true)
 
-    const { user, error: authError } = await signIn(email, password)
+    const { user, error: authError } = await login(email, password)
 
     if (authError) {
       setError(authError)

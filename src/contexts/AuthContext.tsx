@@ -14,6 +14,7 @@ type AuthContextType = {
   setLanguage: (lang: string) => void
   refreshUser: () => Promise<void>
   logout: () => void
+  login: (email: string, password: string) => Promise<{ user: User | null, error: string | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -97,6 +98,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Função de login
+  const login = async (email: string, password: string): Promise<{ user: User | null, error: string | null }> => {
+    if (!supabase) return { user: null, error: 'Supabase não configurado' }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (error) {
+        return { user: null, error: error.message }
+      }
+
+      if (data.user) {
+        // Buscar perfil do usuário
+        const { data: profileData, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
+
+        if (profileError) {
+          return { user: null, error: profileError.message }
+        }
+
+        setUser(profileData)
+        setLanguage(profileData.language || 'pt-BR')
+        localStorage.setItem('serenity_user', JSON.stringify(profileData))
+
+        // Carregar assinatura e plano premium
+        const [sub, premiumPlan] = await Promise.all([
+          getUserSubscription(profileData.id),
+          checkPremiumPlan(profileData.id)
+        ])
+        setSubscription(sub)
+        setIsPremiumFromPlan(premiumPlan)
+
+        return { user: profileData, error: null }
+      }
+
+      return { user: null, error: 'Erro desconhecido' }
+    } catch (err) {
+      return { user: null, error: 'Erro ao fazer login' }
+    }
+  }
+
   useEffect(() => {
     // Carregar usuário do localStorage
     const storedUser = localStorage.getItem('serenity_user')
@@ -165,7 +213,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser: handleSetUser,
       setLanguage,
       refreshUser,
-      logout
+      logout,
+      login
     }}>
       {children}
     </AuthContext.Provider>
