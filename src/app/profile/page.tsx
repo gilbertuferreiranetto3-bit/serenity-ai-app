@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { t, languages } from '@/lib/i18n'
@@ -17,6 +18,11 @@ export default function ProfilePage() {
     router.push('/signin')
     return null
   }
+  useEffect(() => {
+    if (!user) router.replace('/signin')
+  }, [user, router])
+
+  if (!user) return null
 
   const handleLogout = () => {
     logout()
