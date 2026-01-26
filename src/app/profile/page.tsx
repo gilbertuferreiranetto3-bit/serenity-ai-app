@@ -15,8 +15,8 @@ export default function ProfilePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   if (!user) {
-    router.push('/signin')
-    return null
+  import { useState, useEffect } from 'react'
+
   }
   useEffect(() => {
     if (!user) router.replace('/signin')
@@ -28,6 +28,11 @@ export default function ProfilePage() {
     logout()
     router.push('/signin')
   }
+  }, [user, router])
+
+if (!user) {
+  return null // ou uma tela "Carregando..."
+}
 
   const handleExportData = async () => {
     // TODO: Implementar exportação de dados
